@@ -1,0 +1,6 @@
+{
+  "nick": "IAmABot",
+  "server": "irc.freenode.net",
+  "password": "yoursecretpassword",
+  "googleVisionKey": false,
+}
