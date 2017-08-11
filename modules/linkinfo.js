@@ -13,6 +13,10 @@ const moment = require('moment');
 const request = baseRequest.defaults({
   timeout: 2000,
   strictSSL: false,
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:57.0) Gecko/20100101 Firefox/57.0',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  },
 });
 
 function sanitizeContent(content, length = 250) {
@@ -20,14 +24,18 @@ function sanitizeContent(content, length = 250) {
   if (content.length > length) affix = '...';
 
   return content.replace(/(?:\r\n|\r|\n)/g, ' ')
-    .slice(0, length) + affix;
+    .slice(0, length)
+    .trim()
+    + affix;
 }
 
 function parseHtml(url, data) {
   const { client, to } = data;
   request.get(url, function onRequestGetResponse(error, response, body) {
+    if (debug) client.say(to, `[DEBUG]: Will parse html has error: ${error ? 'yes' : 'no'}`);
     if (error) return;
     let isTitle = false;
+    let isInSvg = false;
     let title = '';
     let contentType;
     let contentWidth;
@@ -41,17 +49,20 @@ function parseHtml(url, data) {
           if (tagInfo.itemprop === 'height') contentHeight = sanitizeContent(tagInfo.content, 80);
           if (tagInfo.name === 'twitter:site') twitterHandle = sanitizeContent(tagInfo.content, 80);
         }
-        if (name === 'title') isTitle = true;
+        if (name === 'title' && !isInSvg) isTitle = true;
+        if (name === 'svg') isInSvg = true;
       },
       onclosetag(name) {
-        if (name === 'title') isTitle = false;
+        if (name === 'title' && !isInSvg) isTitle = false;
+        if (name === 'svg') isInSvg = false;
       },
       ontext(text) {
         if (isTitle) title = title + text;
       },
       onend() {
+        if (debug) client.say(to, `[DEBUG]: HTML Parsing done`);
         let message = [];
-        if (title && contentType) message.push(colors.blue.bold(`Title (${contentType}): `) + colors.underline.green(title));
+        if (title && contentType) message.push(colors.blue.bold(`Title (${contentType}): `) + colors.underline.green(sanitizeContent(title)));
         else if (title) message.push(colors.blue.bold('Title: ') + colors.underline.green(sanitizeContent(title)));
         if (contentWidth && contentWidth) message.push(`${contentWidth}x${contentHeight}`);
         if (twitterHandle) message.push(`${twitterHandle}`);
@@ -167,7 +178,8 @@ function checkContentType(url, data) {
   request.head(url, function(error, response) {
     if (error) return console.log(error);
     const headers = response.headers;
-    if (headers['content-type'].match(/text\/html/)) {
+    if (debug) data.client.say(data.to, `[DEBUG]: Content-Type: ${headers['content-type']}`);
+    if (headers['content-type'].match(/text\/(html|plain)/) || headers['content-type'].match(/application\/xhtml/)) {
       parseHtml(url, data);
     }
     else if (headers['content-type'].match(/image/)) {
@@ -179,12 +191,18 @@ function checkContentType(url, data) {
   })
 }
 
+
+let debug = false;
+
 function linkinfo(data) {
   const urls = getUrls(data.message);
   console.log('Checking', urls);
   if (urls.length === 0) {
     return data;
   }
+
+  if (data.message === 'enabledebug') debug = true;
+  if (data.message === 'disabledebug') debug = false;
 
   for (const url of urls) {
     checkContentType(url.replace(/,$/, ''), data);
