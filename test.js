@@ -18,3 +18,17 @@ linkinfo({
   message: 'This link: http://lifehacker.com/how-to-choose-the-best-mechanical-keyboard-and-why-you-511140347, has a <title></title> in the CSS',
   client,
 })
+
+linkinfo({
+  from: 'test',
+  to: '#test',
+  message: 'This link: https://bitcoin.org/bitcoin.pdf, or this one http://che.org.il/wp-content/uploads/2016/12/pdf-sample.pdf, is for a pdf',
+  client,
+})
+
+linkinfo({
+  from: 'test',
+  to: '#test',
+  message: 'This link: https://tweakers.net/nieuws/128261/nvidia-boekt-recordomzet-door-goede-verkoop-gpus-voor-gaming-en-datacenters.html has a problem with the title',
+  client,
+})

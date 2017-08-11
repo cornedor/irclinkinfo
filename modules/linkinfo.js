@@ -5,11 +5,23 @@ const colors = require('irc-colors');
 const config = require('../config.json');
 const imageBase64 = require('image-base64');
 const noEncodingRequest = require('request').defaults({ encoding: null });
+const tmp = require('tmp');
+const exiftool = require('node-exiftool');
+const fs = require('fs');
+const moment = require('moment');
 
 const request = baseRequest.defaults({
   timeout: 2000,
   strictSSL: false,
 });
+
+function sanitizeContent(content, length = 250) {
+  let affix = '';
+  if (content.length > length) affix = '...';
+
+  return content.replace(/(?:\r\n|\r|\n)/g, ' ')
+    .slice(0, length) + affix;
+}
 
 function parseHtml(url, data) {
   const { client, to } = data;
@@ -24,10 +36,10 @@ function parseHtml(url, data) {
     const parser = new htmlparser.Parser({
       onopentag(name, tagInfo) {
         if (name === 'meta') {
-          if (tagInfo.property === 'og:type') contentType = tagInfo.content;
-          if (tagInfo.itemprop === 'width') contentWidth = tagInfo.content;
-          if (tagInfo.itemprop === 'height') contentHeight = tagInfo.content;
-          if (tagInfo.name === 'twitter:site') twitterHandle = tagInfo.content;
+          if (tagInfo.property === 'og:type') contentType = sanitizeContent(tagInfo.content, 80);
+          if (tagInfo.itemprop === 'width') contentWidth = sanitizeContent(tagInfo.content, 80);
+          if (tagInfo.itemprop === 'height') contentHeight = sanitizeContent(tagInfo.content, 80);
+          if (tagInfo.name === 'twitter:site') twitterHandle = sanitizeContent(tagInfo.content, 80);
         }
         if (name === 'title') isTitle = true;
       },
@@ -40,7 +52,7 @@ function parseHtml(url, data) {
       onend() {
         let message = [];
         if (title && contentType) message.push(colors.blue.bold(`Title (${contentType}): `) + colors.underline.green(title));
-        else if (title) message.push(colors.blue.bold('Title: ') + colors.underline.green(title));
+        else if (title) message.push(colors.blue.bold('Title: ') + colors.underline.green(sanitizeContent(title)));
         if (contentWidth && contentWidth) message.push(`${contentWidth}x${contentHeight}`);
         if (twitterHandle) message.push(`${twitterHandle}`);
         client.say(to, message.join(colors.bold(' | ')));
@@ -119,6 +131,38 @@ function imageVision(url, data) {
   });
 }
 
+function parsePdf(url, data) {
+  const { client, to } = data;
+  const filename = tmp.tmpNameSync({ postfix: '.txt' });
+  request(url).pipe(fs.createWriteStream(filename)).on('finish', function() {
+    const ep = new exiftool.ExiftoolProcess()
+
+    ep
+      .open()
+      .then((pid) => console.log('Started exiftool process %s', pid))
+      .then(() => ep.readMetadata(filename, ['-File:all']))
+      .then((res) => {
+        if (!res.data || !res.data[0]) return;
+        const data = res.data[0];
+        let message = [];
+        if (data.Title) message.push(colors.underline.green(sanitizeContent(data.Title)));
+        else message.push(colors.underline.green('PDF file'));
+        if (data.Author) message.push(`By ${sanitizeContent(data.Author)}`);
+        if (data.ModifyDate) {
+          const date = moment(data.ModifyDate, 'YYYY:MM:DD HH:mm:ss');
+          if (date.isValid()) message.push(`Last modified ${date.fromNow()}`);
+        }
+        else if (data.CreateDate) {
+          const date = moment(data.CreateDate, 'YYYY:MM:DD HH:mm:ss');
+          if (date.isValid()) message.push(`Created ${date.fromNow()}`);
+        }
+        client.say(to, message.join(colors.bold(' | ')));
+      }, console.error)
+      .then(() => ep.close())
+      .then(() => console.log('Closed exiftool'), console.error)
+  });
+}
+
 function checkContentType(url, data) {
   request.head(url, function(error, response) {
     if (error) return console.log(error);
@@ -128,6 +172,9 @@ function checkContentType(url, data) {
     }
     else if (headers['content-type'].match(/image/)) {
       imageVision(url, data);
+    }
+    else if (headers['content-type'].match(/\/pdf/)) {
+      parsePdf(url, data);
     }
   })
 }
