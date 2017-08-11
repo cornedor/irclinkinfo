@@ -5,7 +5,7 @@ const config = require('./config.json');
 
 
 const client = new irc.Client(config.server, config.nick, {
-    channels: ['#deltion-test'],
+    channels: config.channels,
     floodProtection: true,
 
 });
