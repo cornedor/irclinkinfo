@@ -2,6 +2,6 @@
   "nick": "IAmABot",
   "server": "irc.freenode.net",
   "password": "yoursecretpassword",
-  "channels" : ['#deltion-test'],
+  "channels" : ["#deltion-test"],
   "googleVisionKey": false
 }
