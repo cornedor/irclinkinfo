@@ -7,9 +7,10 @@ const padStart = require('lodash/padStart');
 
 
 const canvas = new Canvas(150, 80);
-let lastPrice = 0;
+let lastUSDPrice = 0;
+let lastEURPrice = 0;
 
-function getPrice(callback) {
+function getPrice(callback, type) {
   request('https://api.coindesk.com/v1/bpi/currentprice.json', function(error, response, body) {
     if (error) return console.error(error);
     let currentJson;
@@ -17,29 +18,40 @@ function getPrice(callback) {
       currentJson = JSON.parse(body);
     } catch(e) { console.error(e); }
     if (!currentJson || !currentJson.bpi) return console.error('Invalid Json');
-    callback(currentJson.bpi.USD.rate_float);
+    callback(currentJson.bpi[type].rate_float);
   });
 }
 
-getPrice(price => lastPrice = price)
+getPrice(price => lastUSDPrice = price, 'USD');
+getPrice(price => lastEURPrice = price, 'EUR');
 
 function getCurrentPrice(data) {
   const { client, to, message } = data;
 
-  if (message !== '!btc') return data;
-  getPrice(price => {
-    if (lastPrice === price) {
-      client.say(to, 'The current BTC price in USD: ' + colors.blue(`$${price.toFixed(2)} (▶ 0%)`));
-    } else if (lastPrice > price) {
-      const percent = ((lastPrice / price) - 1) * 100;
-      client.say(to, 'The current BTC price in USD: ' + colors.red(`$${price.toFixed(2)} (▼ ${percent.toFixed(2)}%)`));
-    } else {
-      const percent = (1 - (lastPrice / price)) * 100;
-      client.say(to, 'The current BTC price in USD: ' + colors.green(`$${price.toFixed(2)} (▲ ${percent.toFixed(2)}%)`));
-    }
-    lastPrice = price;
-  })
+  if (message !== '!btc' && message !== '!btceur') return data;
+  const type = message  === '!btceur' ? 'EUR' : 'USD';
+  const prefix = `The current BTC price in ${type}: `;
+  const sign = type === 'EUR' ? '€ ' : '$';
+  const last = type === 'EUR' ? lastEURPrice : lastUSDPrice;
 
+  getPrice(price => {
+    if (last === price) {
+      client.say(to, prefix + colors.blue(`${sign}${price.toFixed(2)} (▶ 0%)`));
+    } else if (last > price) {
+      const percent = ((last / price) - 1) * 100;
+      client.say(to, prefix + colors.red(`${sign}${price.toFixed(2)} (▼ ${percent.toFixed(2)}%)`));
+    } else {
+      const percent = (1 - (last / price)) * 100;
+      client.say(to, prefix + colors.green(`${sign}${price.toFixed(2)} (▲ ${percent.toFixed(2)}%)`));
+    }
+    if (type === 'EUR') {
+      lastEURPrice = price;
+    } else {
+      lastUSDPrice = price;
+    }
+  }, type);
+
+  return data;
 }
 
 // https://api.coindesk.com/v1/bpi/historical/close.json
@@ -73,11 +85,10 @@ function getChart(data) {
 
       const draw = canvas.set.bind(canvas);
 
-
       let prevX = 0;
       let prevY = 0;
       for (let i = 0; i < values.length; i++) {
-        const value = values[i];
+        const value = values[i] - 1; // -1 to prevent a negative coordinate.
         const x = i * (150/values.length);
         const y = 79 - ((value - low) / (high - low)) * 79;
         prevY = prevY === 0 ? y : prevY;
@@ -88,7 +99,6 @@ function getChart(data) {
 
       const lines = canvas.frame(',').split(',');
       let footer = '';
-      console.log(initialDate, values[0]);
       for (let i = 0; i < (150/2) + 4; i++) {
         if (i < 5) footer = `${footer} `;
         else if (i === 5) footer = `${footer}⣇`
@@ -114,7 +124,6 @@ function getChart(data) {
       frame[frame.length - 1] = (footer);
       frame.push(dates);
 
-      // process.stdout.write(frame.join('\n') + '\n');
       client.say(to, frame.join('\n'));
     });
   });
