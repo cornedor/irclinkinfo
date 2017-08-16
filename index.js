@@ -30,6 +30,9 @@ client.addListener('pm', function (from, message) {
 
 client.addListener('notice', function (nick, to, message) {
   console.log(`!${to}! ${nick}: ${message}`);
+  if (message.match(/This nickname is registered\./)) {
+    client.say('nickserv', `identify ${config.nick} ${config.nickservPassword}`);
+  }
 });
 
 // TODO: make this cleaner
