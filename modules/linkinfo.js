@@ -29,6 +29,17 @@ function sanitizeContent(content, length = 250) {
     + affix;
 }
 
+function getShortUrl(longUrl) {
+  return new Promise((resolve, reject) => {
+    request.post('https://www.googleapis.com/urlshortener/v1/url?key=AIzaSyBtaucaoeIcZhao8tc38u2FvHUSUyuAOV0', {
+      json: { longUrl }
+    }, (error, response, body) => {
+      if (error) return reject();
+      resolve(body.id);
+    });
+  });
+}
+
 function parseHtml(url, data) {
   const { client, to } = data;
   request.get(url, function onRequestGetResponse(error, response, body) {
@@ -41,6 +52,7 @@ function parseHtml(url, data) {
     let contentWidth;
     let contentHeight;
     let twitterHandle;
+    let ampPromise;
     const parser = new htmlparser.Parser({
       onopentag(name, tagInfo) {
         if (name === 'meta') {
@@ -50,6 +62,7 @@ function parseHtml(url, data) {
           if (tagInfo.name === 'twitter:site') twitterHandle = sanitizeContent(tagInfo.content, 80);
         }
         if (name === 'title' && !isInSvg) isTitle = true;
+        if (name === 'link' && tagInfo.rel === 'amphtml') ampPromise = getShortUrl(tagInfo.href);
         if (name === 'svg') isInSvg = true;
       },
       onclosetag(name) {
@@ -66,7 +79,14 @@ function parseHtml(url, data) {
         else if (title) message.push(colors.blue.bold('Title: ') + colors.underline.green(sanitizeContent(title)));
         if (contentWidth && contentWidth) message.push(`${contentWidth}x${contentHeight}`);
         if (twitterHandle) message.push(`${twitterHandle}`);
-        client.say(to, message.join(colors.bold(' | ')));
+        if (ampPromise) {
+          ampPromise.then(url => {
+            message.push(`AMP: ${url}`);
+            client.say(to, message.join(colors.bold(' | ')));
+          });
+        } else {
+          client.say(to, message.join(colors.bold(' | ')));
+        }
       }
     }, { decodeEntities: true });
 
