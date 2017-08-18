@@ -21,6 +21,7 @@ const request = baseRequest.defaults({
 
 function sanitizeContent(content, length = 250) {
   let affix = '';
+  if (!content) return false;
   if (content.length > length) affix = '...';
 
   return content.replace(/(?:\r\n|\r|\n)/g, ' ')
