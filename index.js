@@ -2,6 +2,7 @@ const irc = require('funsocietyirc-client');
 const http = require('http');
 const prompt = require('prompt');
 const linkinfo = require('./modules/linkinfo.js');
+const assistant = require('./modules/assistant.js');
 const bitcoin = require('./modules/bitcoin.js');
 const config = require('./config.json');
 
@@ -18,6 +19,7 @@ client.addListener('message', function (from, to, message) {
   console.log(`[${to}] ${from}: ${message}`);
   const data = { from, to, message, client };
 
+  assistant.parse(data);
   bitcoin.getCurrentPrice(bitcoin.getChart(linkinfo(data)));
 });
 
